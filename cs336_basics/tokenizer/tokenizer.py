@@ -107,7 +107,8 @@ class Tokenizer:
                 segments.append((text[last_end:], False))
         else:
             segments = [(text, False)]
-
+        # Pretokenize into segments so that when the number of adjecent pairs
+        # is small enough that makes comparison efficient
         for segment, is_special in segments:
             if is_special:
                 ids.append(self.bytes_to_id[segment.encode("utf-8")])
