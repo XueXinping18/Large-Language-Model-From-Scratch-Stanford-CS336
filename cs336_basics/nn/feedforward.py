@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-
+from einops import einsum
 from cs336_basics.nn.linear import Linear
 
 
@@ -33,12 +33,9 @@ class SwiGLU(nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        # TODO: Create three Linear layers: self.w1, self.w2, self.w3
-        #       w1: d_model -> d_ff
-        #       w2: d_ff -> d_model
-        #       w3: d_model -> d_ff
-        raise NotImplementedError
+        self.w1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # TODO: Compute SwiGLU(x) = w2(silu(w1(x)) * w3(x))
-        raise NotImplementedError
+        return self.w2(silu(self.w1(x)) * self.w3(x))
