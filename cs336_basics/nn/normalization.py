@@ -19,16 +19,11 @@ class RMSNorm(nn.Module):
             torch.empty(d_model, device=device, dtype=dtype)
         )
         self.eps = eps
-
+    # Here because of the presence of small epsilon and square operation, it is necessary to upcast to float32
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # 1. Save original dtype, upcast x to float32
+        # Save original dtype, upcast x to float32
         in_dtype = x.dtype
         x = x.to(torch.float32)
-        # 2. Compute RMS: sqrt(mean(x^2) + eps) over the last dimension
-        rms = torch.sqrt(torch.mean(x ** 2, dim = -1, keepdim= True) + self.eps)
-        # 3. Normalize: x / RMS
-        norm = x / rms
-        # 4. Apply learnable multiplication
-        result = norm * self.weight
-        # 5. Downcast back to original dtype
+        rms = torch.rsqrt(torch.mean(x ** 2, dim = -1, keepdim= True) + self.eps)
+        result = (x * rms) * self.weight.to(torch.float32)
         return result.to(in_dtype)
