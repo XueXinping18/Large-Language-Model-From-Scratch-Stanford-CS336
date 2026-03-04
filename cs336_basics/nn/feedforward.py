@@ -32,6 +32,8 @@ class SwiGLU(nn.Module):
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
+        # Ideally d_ff should be set 8/3 * d_model, rounded to a multiple of 64
+        # To avoid waste of computing power (avoid GPU padding 0)
         super().__init__()
         self.w1 = Linear(d_model, d_ff, device=device, dtype=dtype)
         self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
