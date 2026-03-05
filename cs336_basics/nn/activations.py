@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import torch
 
-
+# Softmax: exponential make bigger numbers dominate
+# normalization converts them into probabilities
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
     """Numerically stable softmax.
 
