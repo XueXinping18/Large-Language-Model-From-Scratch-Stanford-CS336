@@ -45,6 +45,7 @@ class RoPE(nn.Module):
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         """Apply RoPE to input tensor.
+            We avoid matrix multiplication in favor of element-wise multiplication.
 
         Args:
             x: (..., seq_len, d_k)

@@ -5,5 +5,6 @@ from cs336_basics.nn.feedforward import SwiGLU, silu
 from cs336_basics.nn.linear import Linear
 from cs336_basics.nn.normalization import RMSNorm
 from cs336_basics.nn.rope import RoPE
+from cs336_basics.nn.transformer_block import TransformerBlock
 
-__all__ = ["CausalMultiHeadSelfAttention", "Embedding", "Linear", "RMSNorm", "RoPE", "SwiGLU", "scaled_dot_product_attention", "silu", "softmax"]
+__all__ = ["CausalMultiHeadSelfAttention", "Embedding", "Linear", "RMSNorm", "RoPE", "SwiGLU", "TransformerBlock", "scaled_dot_product_attention", "silu", "softmax"]

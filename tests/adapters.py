@@ -301,7 +301,17 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.nn.transformer_block import TransformerBlock
+    from cs336_basics.nn import RoPE
+
+    block = TransformerBlock(d_model, num_heads, d_ff)
+    # Remap test key: attn.output_proj -> attn.o_proj
+    remapped = {k.replace("attn.output_proj.", "attn.o_proj."): v for k, v in weights.items()}
+    block.load_state_dict(remapped)
+    d_k = d_model // num_heads
+    rope = RoPE(theta, d_k, max_seq_len)
+    token_positions = torch.arange(in_features.size(-2)).unsqueeze(0)
+    return block(in_features, rope=rope, token_positions=token_positions)
 
 
 def run_transformer_lm(
@@ -328,7 +338,7 @@ def run_transformer_lm(
         num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
             evenly divisible by `num_heads`.
         d_ff (int): Dimensionality of the feed-forward inner layer (section 3.3).
-        rope_theta (float): The RoPE $\Theta$ parameter.
+        rope_theta (float): The RoPE Theta parameter.
         weights (dict[str, Tensor]):
             State dict of our reference implementation. {num_layers} refers to an
             integer between `0` and `num_layers - 1` (the layer index).
