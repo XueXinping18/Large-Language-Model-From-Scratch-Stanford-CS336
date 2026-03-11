@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from einops import einsum, rearrange
 
-from cs336_basics.nn.activations import softmax
+from cs336_basics.nn.softmax import softmax
 from cs336_basics.nn.linear import Linear
 from cs336_basics.nn.rope import RoPE
 

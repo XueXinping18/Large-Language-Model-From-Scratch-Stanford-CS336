@@ -1,4 +1,4 @@
-from cs336_basics.nn.activations import softmax
+from cs336_basics.nn.softmax import softmax
 from cs336_basics.nn.attention import CausalMultiHeadSelfAttention, scaled_dot_product_attention
 from cs336_basics.nn.embedding import Embedding
 from cs336_basics.nn.feedforward import SwiGLU, silu
