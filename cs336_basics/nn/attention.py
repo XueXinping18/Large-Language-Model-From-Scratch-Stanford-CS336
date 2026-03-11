@@ -75,12 +75,12 @@ class CausalMultiHeadSelfAttention(nn.Module):
         q_multihead_batch = rearrange(q_mono, "... seq_len (num_head d_k) -> ... num_head seq_len d_k", num_head=self.num_heads, d_k = self.d_k)
         k_multihead_batch = rearrange(k_mono, "... seq_len (num_head d_k) -> ... num_head seq_len d_k", num_head=self.num_heads, d_k = self.d_k)
         v_multihead_batch = rearrange(v_mono, "... seq_len (num_head d_k) -> ... num_head seq_len d_k", num_head=self.num_heads, d_k = self.d_k)
-        if rope:
+        if rope is not None:
             # add new dimension to token_positions -- 1 is to match num_head in subsequent broadcasting; this guarantees subsequent broadcasted batching
             q_multihead_batch = rope(q_multihead_batch, rearrange(token_positions, "... seq_len -> ... 1 seq_len"))
             k_multihead_batch = rope(k_multihead_batch, rearrange(token_positions, "... seq_len -> ... 1 seq_len"))
         seq_len = x.size(-2)
-        mask = torch.tril(torch.ones(seq_len, seq_len,  dtype=torch.bool))
+        mask = torch.tril(torch.ones(seq_len, seq_len,  dtype=torch.bool, device=x.device))
         attention_multihead = scaled_dot_product_attention(q_multihead_batch, k_multihead_batch, v_multihead_batch, mask)
         attention = rearrange(attention_multihead, "... num_head seq_len d_k -> ... seq_len (num_head d_k)")
         return self.o_proj(attention)
