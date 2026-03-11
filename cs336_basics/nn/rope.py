@@ -37,6 +37,9 @@ class RoPE(nn.Module):
         #   nn.Parameter。但又需要跟着设备移动，所以用 register_buffer
         #   它就是专门给不需要训练但需要跟着模块走的 tensor 设计的
         # Dimension of cos_buf: (max_seq_len, d_k / 2)
+        self.d_k = d_k
+        self.theta = theta
+        self.max_seq_len = max_seq_len
         self.register_buffer("cos_buf", torch.cos(angles), persistent=False)
         self.register_buffer("sin_buf", torch.sin(angles), persistent=False)
 
