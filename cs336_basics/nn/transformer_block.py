@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from cs336_basics.nn import RMSNorm, CausalMultiHeadSelfAttention, SwiGLU
-from cs336_basics.nn.rope import RoPE
+from cs336_basics.nn import RMSNorm, CausalMultiHeadSelfAttention, SwiGLU, RoPE
 
 
 class TransformerBlock(nn.Module):

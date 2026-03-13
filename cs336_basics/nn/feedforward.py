@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from einops import einsum
 from cs336_basics.nn.linear import Linear
 
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
+
+from torch.xpu import device
+
 from cs336_basics.tokenizer.train_bpe import train_bpe
 import numpy.typing as npt
 import torch
@@ -393,7 +396,21 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import TransformerLLM
+
+    model = TransformerLLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
+    # Remap test keys to our naming:
+    #   token_embeddings -> embeddings
+    #   layers.{i} -> transformer_blocks.{i}
+    #   attn.output_proj -> attn.o_proj
+    remapped = {}
+    for k, v in weights.items():
+        new_k = k.replace("token_embeddings.", "embeddings.")
+        new_k = new_k.replace("layers.", "transformer_blocks.")
+        new_k = new_k.replace("attn.output_proj.", "attn.o_proj.")
+        remapped[new_k] = v
+    model.load_state_dict(remapped)
+    return model(in_indices)
 
 
 def run_rmsnorm(

@@ -4,16 +4,22 @@ import torch
 import torch.nn as nn
 
 class Embedding(nn.Module):
+    """Embedding lookup table: maps token IDs to dense vectors.
+
+    Stores a weight matrix of shape (vocab_size, embedding_dim).
+    Forward pass indexes into rows by token ID — no matrix multiplication.
+    """
+
     def __init__(
             self,
-            num_embeddings: int,
-            embedding_dim: int,
+            vocab_size: int, # Number of embeddings
+            embedding_dim: int, # d_model
             device: torch.device | None = None,
             dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         self.weight = nn.Parameter(
-            torch.empty(num_embeddings, embedding_dim, device=device, dtype=dtype)
+            torch.empty(vocab_size, embedding_dim, device=device, dtype=dtype)
         )
         torch.nn.init.trunc_normal_(self.weight, mean=0.0, std=1, a=-3, b=3)
 
