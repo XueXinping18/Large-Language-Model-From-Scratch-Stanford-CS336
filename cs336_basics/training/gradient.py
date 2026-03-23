@@ -24,5 +24,15 @@ def gradient_clipping(
         1. Compute the global L2 norm across all parameter gradients
         2. If norm > max_l2_norm, scale each gradient by (max_l2_norm / norm)
     """
-    # TODO: implement
-    raise NotImplementedError
+    # Using detach to avoid Higher-order Gradients being generated in the computational graph in Pytorch
+    # Note that detach does not copy the data but still point to the data while disabling the construction of further computational graph
+    grads = [p.grad.detach() for p in parameters if p.grad is not None]
+    if not grads:
+        return
+    norm_stack = torch.stack([torch.norm(grad, 2) for grad in grads])
+    total_norm = torch.norm(norm_stack, 2)
+
+    if total_norm > max_l2_norm:
+        clip_coeff = (max_l2_norm / (total_norm + 1e-6))
+        for grad in grads:
+            grad.mul_(clip_coeff) # Or use *=, the in place operations to modify the data the local variable points to
