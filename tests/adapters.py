@@ -508,11 +508,12 @@ def run_cross_entropy(
             unnormalized logit of jth class for the ith example.
         targets (Int[Tensor, "batch_size"]): Tensor of shape (batch_size,) with the index of the correct class.
             Each value must be between 0 and `num_classes - 1`.
-
+        Note that the dimension for sequence length is included in the batch_size
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    from cs336_basics.training import cross_entropy
+    return cross_entropy(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
@@ -531,7 +532,8 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    from cs336_basics.training import AdamW
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
