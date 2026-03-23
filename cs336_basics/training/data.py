@@ -4,7 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-
+# Make sure to use np.memmap to load dataset instead of loading the NDArray entirely to memory that causes OOM
 def get_batch(
     dataset: npt.NDArray,
     batch_size: int,

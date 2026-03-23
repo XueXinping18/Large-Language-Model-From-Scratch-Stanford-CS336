@@ -20,9 +20,8 @@ def save_checkpoint(
         iteration: Current training iteration.
         out: Path or file-like object to write to.
     """
-    # TODO: use torch.save with a dict containing model state_dict,
-    #       optimizer state_dict, and iteration
-    raise NotImplementedError
+    state_to_save = {"it" : iteration, "model_state": model.state_dict(), "optimizer_state": optimizer.state_dict()}
+    torch.save(state_to_save, out)
 
 
 def load_checkpoint(
@@ -40,6 +39,7 @@ def load_checkpoint(
     Returns:
         The iteration number saved in the checkpoint.
     """
-    # TODO: use torch.load, then load_state_dict for model and optimizer,
-    #       and return the iteration
-    raise NotImplementedError
+    checkpoint_state = torch.load(src)
+    model.load_state_dict(checkpoint_state["model_state"])
+    optimizer.load_state_dict(checkpoint_state["optimizer_state"])
+    return checkpoint_state["it"]
