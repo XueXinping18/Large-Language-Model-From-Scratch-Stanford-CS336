@@ -24,7 +24,7 @@ def get_batch(
         x[i] is a random contiguous slice from dataset.
         y[i] is x[i] shifted by one position (the next-token prediction target).
     """
-    indices = torch.randint(len(dataset) - context_length - 1, (batch_size,))
+    indices = torch.randint(len(dataset) - context_length, (batch_size,))
     x = torch.stack([torch.from_numpy(dataset[i : i + context_length]) for i in indices])
     y = torch.stack([torch.from_numpy(dataset[i + 1: i + 1 + context_length]) for i in indices])
     return x.to(device), y.to(device)
