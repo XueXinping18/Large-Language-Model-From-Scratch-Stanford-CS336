@@ -19,6 +19,7 @@ All hyperparameters are configurable via command-line arguments.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import time
@@ -84,6 +85,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wandb_run_name", type=str, default=None)
 
     return parser.parse_args()
+
+
+def compute_grad_norm(model: torch.nn.Module) -> float:
+    """Compute the global L2 norm of all gradients (before clipping)."""
+    total = sum(p.grad.norm() ** 2 for p in model.parameters() if p.grad is not None)
+    return total ** 0.5
+
+
+def compute_weight_norm(model: torch.nn.Module) -> float:
+    """Compute the global L2 norm of all model weights."""
+    total = sum(p.norm() ** 2 for p in model.parameters())
+    return total ** 0.5
+
+
+def compute_activation_stats(logits: torch.Tensor) -> dict[str, float]:
+    """Compute stats of the final layer output (logits) as a proxy for activation health."""
+    return {
+        "activation/logits_mean": logits.mean().item(),
+        "activation/logits_std": logits.std().item(),
+        "activation/logits_max": logits.abs().max().item(),
+    }
 
 
 def compute_d_ff(d_model: int) -> int:
@@ -153,8 +175,10 @@ def main() -> None:
         weight_decay=args.weight_decay,
     )
 
-    # Checkpoint directory
+    # Checkpoint directory & save config
     os.makedirs(args.checkpoint_dir, exist_ok=True)
+    with open(os.path.join(args.checkpoint_dir, "config.json"), "w") as f:
+        json.dump(vars(args), f, indent=2)
 
     # Wandb
     if args.wandb:
@@ -179,27 +203,43 @@ def main() -> None:
         # Backward pass
         optimizer.zero_grad()
         loss.backward()
+        grad_norm = compute_grad_norm(model).item()
         gradient_clipping(model.parameters(), args.max_grad_norm)
         optimizer.step()
 
-        # Log training loss
+        # Log training metrics
         if it % args.log_interval == 0:
             elapsed = time.perf_counter() - start_time
             tokens_per_sec = it * args.batch_size * args.context_length / elapsed
+            train_ppl = math.exp(min(loss.item(), 20))  # cap to avoid overflow
             print(
                 f"  iter {it:>6d}/{args.max_iters} | "
-                f"loss {loss.item():.4f} | lr {lr:.2e} | "
-                f"{tokens_per_sec:,.0f} tok/s"
+                f"loss {loss.item():.4f} | ppl {train_ppl:.1f} | "
+                f"lr {lr:.2e} | grad_norm {grad_norm:.2f} | "
+                f"{tokens_per_sec:,.0f} tok/s | {elapsed:.0f}s"
             )
             if args.wandb:
-                wandb.log({"train/loss": loss.item(), "train/lr": lr, "train/tokens_per_sec": tokens_per_sec}, step=it)
+                wandb.log({
+                    "train/loss": loss.item(),
+                    "train/perplexity": train_ppl,
+                    "train/lr": lr,
+                    "train/grad_norm": grad_norm,
+                    "train/tokens_per_sec": tokens_per_sec,
+                    "train/wallclock_sec": elapsed,
+                }, step=it)
 
         # Evaluate on validation set
         if it % args.val_interval == 0:
             val_loss = estimate_val_loss(model, val_data, args.batch_size, args.context_length, args.device, args.val_batches)
-            print(f"  >>> val loss: {val_loss:.4f}")
+            val_ppl = math.exp(min(val_loss, 20))
+            elapsed = time.perf_counter() - start_time
+            print(f"  >>> val loss: {val_loss:.4f} | val ppl: {val_ppl:.1f}")
             if args.wandb:
-                wandb.log({"val/loss": val_loss}, step=it)
+                wandb.log({
+                    "val/loss": val_loss,
+                    "val/perplexity": val_ppl,
+                    "val/wallclock_sec": elapsed,
+                }, step=it)
 
         # Save checkpoint
         if it % args.checkpoint_interval == 0:
