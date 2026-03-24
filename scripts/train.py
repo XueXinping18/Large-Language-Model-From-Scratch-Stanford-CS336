@@ -212,10 +212,13 @@ def main() -> None:
             elapsed = time.perf_counter() - start_time
             tokens_per_sec = it * args.batch_size * args.context_length / elapsed
             train_ppl = math.exp(min(loss.item(), 20))  # cap to avoid overflow
+            weight_norm = compute_weight_norm(model).item()
+            act_stats = compute_activation_stats(logits)
             print(
                 f"  iter {it:>6d}/{args.max_iters} | "
                 f"loss {loss.item():.4f} | ppl {train_ppl:.1f} | "
                 f"lr {lr:.2e} | grad_norm {grad_norm:.2f} | "
+                f"w_norm {weight_norm:.1f} | "
                 f"{tokens_per_sec:,.0f} tok/s | {elapsed:.0f}s"
             )
             if args.wandb:
@@ -224,8 +227,10 @@ def main() -> None:
                     "train/perplexity": train_ppl,
                     "train/lr": lr,
                     "train/grad_norm": grad_norm,
+                    "train/weight_norm": weight_norm,
                     "train/tokens_per_sec": tokens_per_sec,
                     "train/wallclock_sec": elapsed,
+                    **act_stats,
                 }, step=it)
 
         # Evaluate on validation set
