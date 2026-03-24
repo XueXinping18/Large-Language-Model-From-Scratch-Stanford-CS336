@@ -1,19 +1,19 @@
 """Training script for Transformer LLM.
 
 Usage:
+    # From command line:
     python -m scripts.train \
         --train_data output/tinystories_bpe/train.npy \
         --val_data output/tinystories_bpe/valid.npy \
-        --vocab_size 10000 \
-        --context_length 256 \
-        --d_model 512 \
-        --num_layers 4 \
-        --num_heads 8 \
-        --d_ff 1024 \
-        --max_iters 5000 \
-        --batch_size 32
+        --vocab_size 10000
 
-All hyperparameters are configurable via command-line arguments.
+    # From a JSON config file:
+    python -m scripts.train --config configs/tinystories_overfit.json
+
+    # Config file overrides can be mixed with CLI args (CLI wins):
+    python -m scripts.train --config configs/tinystories.json --max_lr 5e-4
+
+All hyperparameters are configurable via command-line arguments or JSON config.
 """
 
 from __future__ import annotations
@@ -23,10 +23,9 @@ import json
 import math
 import os
 import time
-
+import wandb
 import numpy as np
 import torch
-import wandb
 
 from cs336_basics.nn import TransformerLLM
 from cs336_basics.training import (
@@ -39,19 +38,30 @@ from cs336_basics.training import (
 )
 
 
+def _detect_device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a Transformer LLM")
 
+    # Config file (values serve as defaults; CLI args override)
+    parser.add_argument("--config", type=str, default=None, help="Path to JSON config file")
+
     # Data
-    parser.add_argument("--train_data", type=str, required=True, help="Path to training .npy file")
-    parser.add_argument("--val_data", type=str, required=True, help="Path to validation .npy file")
+    parser.add_argument("--train_data", type=str, default=None, help="Path to training .npy file")
+    parser.add_argument("--val_data", type=str, default=None, help="Path to validation .npy file")
 
     # Model
-    parser.add_argument("--vocab_size", type=int, required=True)
+    parser.add_argument("--vocab_size", type=int, default=None)
     parser.add_argument("--context_length", type=int, default=256)
     parser.add_argument("--d_model", type=int, default=512)
     parser.add_argument("--num_layers", type=int, default=4)
-    parser.add_argument("--num_heads", type=int, default=8)
+    parser.add_argument("--num_heads", type=int, default=16)
     parser.add_argument("--d_ff", type=int, default=None, help="FFN inner dim. Default: round(8/3 * d_model) to multiple of 64")
     parser.add_argument("--rope_theta", type=float, default=10000.0)
 
@@ -70,7 +80,10 @@ def parse_args() -> argparse.Namespace:
 
     # Training
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--compile", action="store_true", help="JIT-compile model with torch.compile")
+    parser.add_argument("--overfit_single_batch", action="store_true",
+                        help="Cache one batch and reuse it every iteration (sanity check)")
 
     # Logging & checkpointing
     parser.add_argument("--log_interval", type=int, default=50, help="Log every N iterations")
@@ -84,7 +97,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wandb_project", type=str, default="cs336-transformer")
     parser.add_argument("--wandb_run_name", type=str, default=None)
 
-    return parser.parse_args()
+    # First parse to get --config path
+    args, remaining = parser.parse_known_args()
+
+    # If config file provided, load it and set as defaults (CLI args override)
+    if args.config is not None:
+        with open(args.config) as f:
+            config = json.load(f)
+        parser.set_defaults(**config)
+
+    # Re-parse with config defaults applied
+    args = parser.parse_args()
+
+    # Auto-detect device if not specified
+    if args.device is None:
+        args.device = _detect_device()
+
+    # Validate required fields
+    if args.train_data is None or args.vocab_size is None:
+        parser.error("--train_data and --vocab_size are required (via CLI or config)")
+
+    return args
 
 
 def compute_grad_norm(model: torch.nn.Module) -> float:
@@ -166,6 +199,15 @@ def main() -> None:
     num_params = sum(p.numel() for p in model.parameters())
     print(f"  {num_params:,} parameters")
 
+    # JIT compile
+    if args.compile:
+        if args.device == "mps":
+            print("  Compiling model with backend='aot_eager' (MPS)...")
+            model = torch.compile(model, backend="aot_eager")
+        else:
+            print("  Compiling model...")
+            model = torch.compile(model)
+
     # Optimizer
     optimizer = AdamW(
         model.parameters(),
@@ -182,10 +224,17 @@ def main() -> None:
 
     # Wandb
     if args.wandb:
+        import wandb
         wandb.init(project=args.wandb_project, name=args.wandb_run_name, config=vars(args))
 
+    # Cache a single batch for overfit mode
+    if args.overfit_single_batch:
+        print("\n*** OVERFIT MODE: reusing a single batch every iteration ***")
+        fixed_x, fixed_y = get_batch(train_data, args.batch_size, args.context_length, args.device)
+
     # Training loop
-    print(f"\nTraining for {args.max_iters} iterations...")
+    total_tokens = args.batch_size * args.max_iters * args.context_length
+    print(f"\nTraining for {args.max_iters} iterations ({total_tokens:,} tokens)...")
     model.train()
     start_time = time.perf_counter()
 
@@ -196,7 +245,10 @@ def main() -> None:
             param_group["lr"] = lr
 
         # Forward pass
-        x, y = get_batch(train_data, args.batch_size, args.context_length, args.device)
+        if args.overfit_single_batch:
+            x, y = fixed_x, fixed_y
+        else:
+            x, y = get_batch(train_data, args.batch_size, args.context_length, args.device)
         logits = model(x)
         loss = cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
 
@@ -222,6 +274,7 @@ def main() -> None:
                 f"{tokens_per_sec:,.0f} tok/s | {elapsed:.0f}s"
             )
             if args.wandb:
+                import wandb
                 wandb.log({
                     "train/loss": loss.item(),
                     "train/perplexity": train_ppl,
