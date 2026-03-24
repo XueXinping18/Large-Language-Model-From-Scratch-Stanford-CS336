@@ -27,4 +27,4 @@ def get_batch(
     indices = torch.randint(len(dataset) - context_length, (batch_size,))
     x = torch.stack([torch.from_numpy(dataset[i : i + context_length]) for i in indices])
     y = torch.stack([torch.from_numpy(dataset[i + 1: i + 1 + context_length]) for i in indices])
-    return x.to(device), y.to(device)
+    return x.long().to(device), y.long().to(device)

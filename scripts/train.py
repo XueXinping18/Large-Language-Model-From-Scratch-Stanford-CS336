@@ -120,6 +120,15 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def make_logger(log_path: str):
+    """Returns a log() function that prints to stdout and appends to a file."""
+    def log(msg: str) -> None:
+        print(msg)
+        with open(log_path, "a") as f:
+            f.write(msg + "\n")
+    return log
+
+
 def compute_grad_norm(model: torch.nn.Module) -> float:
     """Compute the global L2 norm of all gradients (before clipping)."""
     total = sum(p.grad.norm() ** 2 for p in model.parameters() if p.grad is not None)
@@ -221,6 +230,7 @@ def main() -> None:
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     with open(os.path.join(args.checkpoint_dir, "config.json"), "w") as f:
         json.dump(vars(args), f, indent=2)
+    log = make_logger(os.path.join(args.checkpoint_dir, "train.log"))
 
     # Wandb
     if args.wandb:
@@ -256,6 +266,8 @@ def main() -> None:
         optimizer.zero_grad()
         loss.backward()
         grad_norm = compute_grad_norm(model).item()
+        if grad_norm > args.max_grad_norm:
+            log(f"  [clip] iter {it}: grad_norm {grad_norm:.3f} > {args.max_grad_norm}, clipping")
         gradient_clipping(model.parameters(), args.max_grad_norm)
         optimizer.step()
 
@@ -266,7 +278,7 @@ def main() -> None:
             train_ppl = math.exp(min(loss.item(), 20))  # cap to avoid overflow
             weight_norm = compute_weight_norm(model).item()
             act_stats = compute_activation_stats(logits)
-            print(
+            log(
                 f"  iter {it:>6d}/{args.max_iters} | "
                 f"loss {loss.item():.4f} | ppl {train_ppl:.1f} | "
                 f"lr {lr:.2e} | grad_norm {grad_norm:.2f} | "
@@ -291,7 +303,7 @@ def main() -> None:
             val_loss = estimate_val_loss(model, val_data, args.batch_size, args.context_length, args.device, args.val_batches)
             val_ppl = math.exp(min(val_loss, 20))
             elapsed = time.perf_counter() - start_time
-            print(f"  >>> val loss: {val_loss:.4f} | val ppl: {val_ppl:.1f}")
+            log(f"  >>> val loss: {val_loss:.4f} | val ppl: {val_ppl:.1f}")
             if args.wandb:
                 wandb.log({
                     "val/loss": val_loss,
@@ -303,12 +315,12 @@ def main() -> None:
         if it % args.checkpoint_interval == 0:
             ckpt_path = os.path.join(args.checkpoint_dir, f"checkpoint_{it}.pt")
             save_checkpoint(model, optimizer, it, ckpt_path)
-            print(f"  >>> saved checkpoint to {ckpt_path}")
+            log(f"  >>> saved checkpoint to {ckpt_path}")
 
     # Final checkpoint
     final_path = os.path.join(args.checkpoint_dir, "checkpoint_final.pt")
     save_checkpoint(model, optimizer, args.max_iters, final_path)
-    print(f"\nTraining complete. Final checkpoint saved to {final_path}")
+    log(f"\nTraining complete. Final checkpoint saved to {final_path}")
 
     if args.wandb:
         wandb.finish()
